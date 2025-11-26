@@ -1,68 +1,117 @@
 :root {
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
+  /* ==============================
+     Paleta de Cores Vamu! Rec
+     ============================== */
+  --vamu-blue: #141b2d;   /* Azul Marinho (Fundo da Logo) */
+  --vamu-orange: #fca311; /* Laranja (Detalhe da Logo) */
+  --vamu-light: #f8f9fa;  /* Fundo da Página (Cinza muito claro) */
+  --vamu-white: #ffffff;
+}
 
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
-
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
+/* ==============================
+   Reset e Configurações Base
+   ============================== */
+body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--vamu-light);
+  color: var(--vamu-blue);
+  /* Define a fonte padrão (Inter ou do sistema) */
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Garante que links não tenham comportamento padrão feio */
 a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-a:hover {
-  color: #535bf2;
+  text-decoration: none;
+  color: inherit;
 }
 
-body {
-  margin: 0;
-  display: flex;
-  place-items: center;
-  min-width: 320px;
-  min-height: 100vh;
+/* ==============================
+   Scrollbar Customizada (Estilo Moderno)
+   ============================== */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
 }
 
-h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
+::-webkit-scrollbar-track {
+  background: #e9ecef; 
 }
 
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  background-color: #1a1a1a;
-  cursor: pointer;
-  transition: border-color 0.25s;
-}
-button:hover {
-  border-color: #646cff;
-}
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
+::-webkit-scrollbar-thumb {
+  background: #ced4da; 
+  border-radius: 4px;
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
+::-webkit-scrollbar-thumb:hover {
+  background: var(--vamu-orange); /* Laranja ao passar o mouse */
+}
+
+/* ==============================
+   Utilitários de Cor (Classes Auxiliares)
+   ============================== */
+.text-vamu-blue {
+  color: var(--vamu-blue) !important;
+}
+
+.bg-vamu-blue {
+  background-color: var(--vamu-blue) !important;
+}
+
+.text-vamu-orange {
+  color: var(--vamu-orange) !important;
+}
+
+.bg-vamu-orange {
+  background-color: var(--vamu-orange) !important;
+}
+
+/* ==============================
+   Componentes Customizados
+   ============================== */
+
+/* Botão Principal da Marca */
+.btn-vamu {
+  background-color: var(--vamu-blue);
+  color: var(--vamu-white);
+  border: 1px solid var(--vamu-blue);
+  transition: all 0.3s ease;
+}
+
+.btn-vamu:hover {
+  background-color: #0f1422; /* Um tom mais escuro */
+  color: var(--vamu-orange); /* Texto fica laranja no hover */
+  border-color: var(--vamu-orange);
+}
+
+.btn-vamu:disabled {
+  background-color: #4a5568;
+  border-color: #4a5568;
+  color: #a0aec0;
+}
+
+/* Animação de "Digitando" (Pulse) */
+.animate-pulse {
+  animation: pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
   }
-  a:hover {
-    color: #747bff;
+  50% {
+    opacity: .5;
   }
-  button {
-    background-color: #f9f9f9;
-  }
+}
+
+/* ==============================
+   Ajustes Específicos do Layout
+   ============================== */
+
+/* Ajuste para o Chat não estourar a altura */
+.chat-container {
+  height: calc(100vh - 140px); /* Altura total menos o header */
 }
