@@ -1,4 +1,4 @@
-# 🤖 Multi AI Assistant Frontend - Vamu! Rec
+# 🤖 Multi AI Assistant with RAG
 
 ## About the Project
 
