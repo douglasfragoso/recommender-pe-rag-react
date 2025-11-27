@@ -2,7 +2,8 @@ import { useState, useRef, useEffect } from "react";
 import { ChatMessage } from "./ChatMessage";
 import { ModelSelector } from "./ModelSelector";
 import { Send, Square, RefreshCw } from "lucide-react";
-import { chatService } from "../services/api";
+// Importamos apenas a URL base, pois faremos o fetch manual aqui
+import { api } from "../services/api"; 
 
 // Recebe conversationLoaded do App.jsx
 export const ChatInterface = ({ conversationLoaded }) => {
@@ -10,26 +11,20 @@ export const ChatInterface = ({ conversationLoaded }) => {
   const [input, setInput] = useState("");
   const [selectedModel, setSelectedModel] = useState("gemini");
   const [isStreaming, setIsStreaming] = useState(false);
-  const [eventSource, setEventSource] = useState(null);
+  const abortControllerRef = useRef(null); // Controle para cancelar a requisição
   const scrollAreaRef = useRef(null);
 
-  // Efeito para carregar histórico quando o usuário clica na barra lateral
+  // Carrega histórico quando selecionado
   useEffect(() => {
     if (conversationLoaded) {
       const formattedMessages = [];
-      
-      // O backend retorna arrays separados de mensagens e respostas
-      // Vamos uni-los em ordem cronológica para o chat
       if (conversationLoaded.messages && conversationLoaded.responses) {
         conversationLoaded.messages.forEach((msg, index) => {
-          // Adiciona pergunta do usuário
           formattedMessages.push({
             role: "user",
             content: msg,
             timestamp: new Date(conversationLoaded.localData)
           });
-
-          // Adiciona resposta da IA (se existir para este índice)
           if (conversationLoaded.responses[index]) {
             formattedMessages.push({
               role: "assistant",
@@ -40,11 +35,10 @@ export const ChatInterface = ({ conversationLoaded }) => {
         });
       }
       setMessages(formattedMessages);
-      // Atualiza o modelo selecionado para o da conversa antiga
       if (conversationLoaded.modelName) {
-        // Tenta mapear o nome do modelo (ex: deepseek-r1 -> deepseek)
-        const simpleModelName = conversationLoaded.modelName.toLowerCase().includes('deepseek') ? 'deepseek' 
-          : conversationLoaded.modelName.toLowerCase().includes('gemini') ? 'gemini' 
+        const name = conversationLoaded.modelName.toLowerCase();
+        const simpleModelName = name.includes('deepseek') ? 'deepseek' 
+          : name.includes('gemini') ? 'gemini' 
           : 'ollama';
         setSelectedModel(simpleModelName);
       }
@@ -62,17 +56,17 @@ export const ChatInterface = ({ conversationLoaded }) => {
   }, [messages]);
 
   const stopStreaming = () => {
-    if (eventSource) {
-      eventSource.close();
-      setEventSource(null);
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
     }
     setIsStreaming(false);
   };
 
   const handleClearChat = () => {
+    stopStreaming();
     setMessages([]);
     setInput("");
-    stopStreaming();
   };
 
   const sendMessage = async () => {
@@ -84,70 +78,103 @@ export const ChatInterface = ({ conversationLoaded }) => {
       timestamp: new Date(),
     };
 
+    // Atualiza UI com mensagem do usuário
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
     setIsStreaming(true);
 
-    const assistantMessage = {
+    // Cria placeholder para resposta da IA
+    setMessages((prev) => [...prev, {
       role: "assistant",
       content: "",
       timestamp: new Date(),
-    };
+    }]);
 
-    setMessages((prev) => [...prev, assistantMessage]);
+    // Prepara o AbortController para poder cancelar
+    abortControllerRef.current = new AbortController();
 
     try {
-      const es = chatService.createEventSource(selectedModel, userMessage.content);
-      setEventSource(es);
+      const encodedMessage = encodeURIComponent(userMessage.content);
+      // Usamos a URL base do axios (api.defaults.baseURL)
+      const baseUrl = api.defaults.baseURL || 'http://localhost:8080';
+      const url = `${baseUrl}/ai/chat/${selectedModel}?message=${encodedMessage}`;
 
-      es.onmessage = (event) => {
-        const token = event.data;
-        
-        if (token === "[DONE]" || token.includes("❌ Erro")) {
-          es.close();
-          setIsStreaming(false);
-          setEventSource(null);
-          
-          if (token.includes("❌ Erro")) {
-            // Remove as aspas extras se vierem do backend
-            const errorMsg = token.replace(/"/g, '');
-            setMessages(prev => {
-                const newArr = [...prev];
-                newArr[newArr.length - 1].content = errorMsg;
-                return newArr;
+      // FETCH MANUAL (Substituindo EventSource)
+      const response = await fetch(url, {
+        method: 'GET',
+        signal: abortControllerRef.current.signal,
+        headers: {
+          'Accept': 'text/event-stream',
+        },
+      });
+
+      if (!response.ok) throw new Error(response.statusText);
+
+      // Leitor de Stream
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        // Decodifica o chunk recebido
+        const chunk = decoder.decode(value, { stream: true });
+        buffer += chunk;
+
+        // Processa linhas completas
+        const lines = buffer.split('\n');
+        // Mantém o último pedaço no buffer se não terminar com \n
+        buffer = lines.pop() || ""; 
+
+        for (const line of lines) {
+          if (line.trim() === '') continue;
+
+          // Procura pelo prefixo "data:"
+          if (line.startsWith('data:')) {
+            // O segredo está aqui: pegamos tudo após "data:"
+            // Se o backend mandou "data: Palavra", pegamos " Palavra" (com espaço)
+            let token = line.substring(5); 
+            
+            // Tratamento especial para [DONE]
+            if (token.trim() === '[DONE]') {
+              stopStreaming();
+              return;
+            }
+
+            // Se o token for exatamente um espaço que foi trimado na rede (raro, mas possível)
+            if (token === '') token = '\n'; 
+
+            // Atualiza o estado
+            setMessages((prev) => {
+              const newMessages = [...prev];
+              const lastIndex = newMessages.length - 1;
+              if (lastIndex >= 0) {
+                // Substitui quebras de linha literais se houver
+                const cleanToken = token.replaceAll("\\n", "\n");
+                newMessages[lastIndex] = {
+                    ...newMessages[lastIndex],
+                    content: newMessages[lastIndex].content + cleanToken
+                };
+              }
+              return newMessages;
             });
           }
-          return;
         }
-
-        // LÓGICA DE ATUALIZAÇÃO SEGURA
-        setMessages((prev) => {
-          const newMessages = [...prev];
-          const lastIndex = newMessages.length - 1;
-          
-          // Garante que estamos editando a última mensagem e que ela é do assistente
-          if (lastIndex >= 0 && newMessages[lastIndex].role === "assistant") {
-            // Decodifica quebras de linha se necessário (depende do backend)
-            const cleanToken = token.replaceAll("\\n", "\n");
-            newMessages[lastIndex] = {
-                ...newMessages[lastIndex],
-                content: newMessages[lastIndex].content + cleanToken
-            };
-          }
-          return newMessages;
-        });
-      };
-
-      es.onerror = (error) => {
-        console.error("EventSource error:", error);
-        es.close();
-        setIsStreaming(false);
-        setEventSource(null);
-      };
+      }
     } catch (error) {
-      console.error("Error sending message:", error);
+      if (error.name !== 'AbortError') {
+        console.error("Erro no stream:", error);
+        setMessages(prev => {
+           const newArr = [...prev];
+           newArr[newArr.length - 1].content += "\n[Erro na conexão]";
+           return newArr;
+        });
+      }
+    } finally {
       setIsStreaming(false);
-      alert("Erro ao enviar mensagem.");
+      abortControllerRef.current = null;
     }
   };
 
@@ -192,7 +219,6 @@ export const ChatInterface = ({ conversationLoaded }) => {
 
       <div className="card-footer bg-light p-3 border-top">
         <div className="input-group shadow-sm">
-          {/* Botão limpar chat */}
           <button 
              className="btn btn-outline-secondary"
              onClick={handleClearChat}
